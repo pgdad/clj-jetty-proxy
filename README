@@ -1,0 +1,55 @@
+# clj-jetty-proxy
+
+clj-jetty-proxy implements an extenstion to org.eclipse.jetty.servlets.ProxyServlet
+that uses a clojure function (4 ary function) to figure out what url to proxy
+requests to.
+
+Uses leingen for building and dependency management.
+
+## Usage
+
+(ns clj-jetty-proxy.core
+  (:use [clj-jetty-proxy.proxyservlet])
+  (:import (org.eclipse.jetty.server Server)
+           (org.eclipse.jetty.server.handler HandlerCollection ConnectHandler)
+           (org.eclipse.jetty.server.nio SelectChannelConnector)
+           (org.eclipse.jetty.servlet ServletContextHandler ServletHolder)
+           (org.eclipse.jetty.servlets ProxyServlet ProxyServlet$Transparent))
+  (:gen-class))
+
+(defn- mapper-fn
+  "returns a string to proxy to, available parameters are obtained from the incoming request"
+  [schema host port uri]
+  (do
+    (println (str "SCHEMA: " schema))
+    (println (str "HOST: " host))
+    (println (str "PORT: " port))
+    (println (str "URI: " uri)))
+    (if (. (String. uri) startsWith "/yahoo")
+      "http://www.yahoo.com"
+      "http://www.cnn.com"))
+
+(defn -main
+  []
+  (let [server (Server.)
+        connector (SelectChannelConnector.)
+        handlers (HandlerCollection.)
+        ]
+    (. connector setPort 8888)
+    (. server addConnector connector)
+    (. server setHandler handlers)
+    ;; setup proxy servlet
+    (let [context (ServletContextHandler.
+                   handlers "/" ServletContextHandler/SESSIONS)
+          proxyServlet (ServletHolder.
+                        (make-proxy mapper-fn))
+          proxy (ConnectHandler.)]
+      (. context addServlet proxyServlet "/*")
+      (. handlers addHandler proxy)
+      (. server start))))
+
+## License
+
+Copyright (C) 2012 pgdad
+
+Distributed under the Eclipse Public License, the same as Clojure.
