@@ -102,6 +102,7 @@
   (. Thread sleep 100)
   (log/spy :debug (str "INSTANCE CREATED: " file-node))
   (dosync
+   (Thread/sleep 100)
    (let [data-str (get-file-data client file-node)
          i-to-load (ensure instance-to-load-ref)
          value (instance-str-value data-str)]
