@@ -67,10 +67,7 @@
         connector (SelectChannelConnector.)
         handlers (HandlerCollection.)
         ]
-    (let [tracker (tr/initialize keepers
-                                 (str "/services/" env "/" app "/services/" region)
-                                 (str "/clientregistrations/" env "/" app)
-                                 (str "/services" env "/" app "/servers/" region))]
+    (let [tracker (tr/initialize keepers env app region)]
       (. connector setPort 8888)
       (. server addConnector connector)
       (. server setHandler handlers)
@@ -83,3 +80,8 @@
         (. context addServlet proxyServlet "/*")
         (. handlers addHandler proxy)
         (. server start)))))
+
+(defn main2
+  [keepers env app region]
+  (let [tracker (tr/initialize keepers env app region)]
+    tracker))
