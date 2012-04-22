@@ -1,6 +1,6 @@
 (ns clj-jetty-proxy.proxyservlet
   (:require [zookeeper :as zk] [clj-zoo-watcher.core :as w]
-            [clojure.reflect] [clj-tree-zipper.core :as tz] [clojure.zip :as z]
+            [clojure.reflect] [clojure.zip :as z]
             [clojure.tools.logging :as log] [clj-zoo-service-tracker.core :as tr])
   (:import (org.eclipse.jetty.servlets ProxyServlet ProxyServlet$Transparent)
 	   (org.eclipse.jetty.servlet ServletContextHandler ServletHolder)
@@ -31,8 +31,12 @@
   "returns a string to proxy to, available parameters are obtained from the incoming request"
   [tracker-ref request uri]
   (do
-    (w/print-tree (:zipper @(:routes @tracker-ref)))
-    (let [service (.getHeader request "service-name")
+    (let [
+          ]
+      )
+    (let [my-region (:my-region @tracker-ref)
+          routes-multi (:routes-multi @tracker-ref)
+          service (.getHeader request "service-name")
 	  client-id (.getHeader request "client-id")
 	  client-verified (verify-client (:client-regs-ref @tracker-ref) client-id service)
 	  major (.getIntHeader request "service-version-major")
@@ -47,19 +51,13 @@
         ;; nil here means the 'service-name' is not in request
         ;; or client is not allowed to access service
         nil
-        (let [serv-tree (tz/find-path (:zipper @(:routes @tracker-ref))
-                                      (list "/" service))]
-          (if-not serv-tree
-            ;; this means that service is not registered
-            nil
-            ;; service at least has existed
-            ;; we still might not have any currently
-            ;; available
-
-            ;; check to see if version is asked for
-            (let [selected-service (tr/lookup-service tracker-ref service major minor uri)]
-              (log/spy :debug (str "SELECTED: " selected-service))
-              selected-service)))))))
+        ;; check to see if version is asked for
+        (let [selected-service (tr/lookup-service tracker-ref service major minor uri client-id)]
+          (log/spy :debug (str "SELECTED: " selected-service))
+          selected-service)
+        ;;            )
+        ;;        )
+        ))))
 
 (defn -main
   [keepers env app region]
