@@ -52,12 +52,7 @@
         ;; or client is not allowed to access service
         nil
         ;; check to see if version is asked for
-        (let [selected-service (tr/lookup-service tracker-ref service major minor uri client-id)]
-          (log/spy :debug (str "SELECTED: " selected-service))
-          selected-service)
-        ;;            )
-        ;;        )
-        ))))
+        (tr/lookup-service tracker-ref service major minor uri client-id)))))
 
 (defn -main
   [keepers env app region]
