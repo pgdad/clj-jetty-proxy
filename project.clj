@@ -12,4 +12,4 @@
   :repl-init clj-jetty-proxy.proxyservlet
   :main clj-jetty-proxy.proxyservlet
   :uberjar-exclusions [#"(?i)^META-INF/[^/]*\.SF$"]
-  :aot [clj-jetty-proxy.proxyservlet])
+  :aot [clj-jetty-proxy.proxylistener clj-jetty-proxy.proxyservlet])
