@@ -1,7 +1,8 @@
 (ns clj-jetty-proxy.proxyservlet
-  (:require [zookeeper :as zk] [clj-zoo-watcher.core :as w]
+  (:require [zookeeper :as zk]
             [clojure.reflect] [clojure.zip :as z]
-            [clojure.tools.logging :as log] [clj-zoo-service-tracker.core :as tr])
+            [clojure.tools.logging :as log]
+            [clj-zoo-service-tracker.core :as tr])
   (:import (org.eclipse.jetty.servlets ProxyServlet ProxyServlet$Transparent)
 	   (org.eclipse.jetty.servlet ServletContextHandler ServletHolder)
            (org.eclipse.jetty.http HttpURI)
@@ -22,31 +23,38 @@
 
 (def healthcheck-on (ref true))
 
+(defn- trace?
+  [traces exchange]
+  (traces (.toString (.getAddress exchange))))
+
 (defn- add-connection
-  [connection exchange root-node]
+  [traces connection exchange root-node]
   (send-off current-connections inc)
-  (let [node (str root-node "/" (.getAddress exchange) "/-instance")
+  (if (trace? traces exchange)
+    (let [node (str root-node "/" (.getAddress exchange) "/-instance")
         node-reply (zk/create-all connection node :sequential? true :async? true)]
-    (dosync
-     (alter connections assoc exchange node-reply))))
+      (dosync
+       (alter connections assoc exchange node-reply)))))
 
 (defn- remove-connection
-  [connection exchange]
+  [trace-it connection exchange]
   (send-off current-connections dec)
-  (dosync
-   (let [node-create-respond-ref (connections exchange)
-         node (:name @node-create-respond-ref)]
-     (zk/delete connection node :async? true))
-   (alter connections dissoc exchange)))
+  (if trace-it
+    (dosync
+     (let [node-create-respond-ref (connections exchange)
+           node (:name @node-create-respond-ref)]
+       (zk/delete connection node :async? true))
+     (alter connections dissoc exchange))))
 
 (defn- set-listener
-  [connection exchange]
+  [traces connection exchange]
   (let [old-listener (.getEventListener exchange)]
     (.setEventListener exchange
                        (listener connection
                                  old-listener
                                  #(.isDone exchange)
-                                 #(remove-connection connection exchange)))))
+                                 #(remove-connection (trace? traces exchange)
+                                                     connection exchange)))))
 
 (defn- healthcheck
   [req res]
@@ -76,12 +84,14 @@
                         "/_status" status})
 
 (defn make-proxy
-  "takes a 2 ary function that returns a url string"
-  [connection connections-root-node url-mapper]
+  "creates ProxyServlet that customizes exchange, and configures url"
+  [traces-ref connection connections-root-node url-mapper]
   (proxy [org.eclipse.jetty.servlets.ProxyServlet] []
     (customizeExchange [exchange request]
-      (add-connection connection exchange connections-root-node)
-      (set-listener connection exchange))
+      (println (str "TRACES: " @traces-ref))
+      (let [traces @traces-ref]
+        (add-connection traces connection exchange connections-root-node)
+        (set-listener traces connection exchange)))
     (proxyHttpURI [request uri]
       (let [url (url-mapper request uri)]
         (if url
@@ -135,20 +145,23 @@
         ]
     (println (str "CONNECTIONS ROOT NODE: " connections-root-node))
     (let [tracker (tr/initialize keepers env app region)]
-      (. connector setPort 8888)
-      (. server addConnector connector)
-      (. server setHandler handlers)
+      (println (str "TRACKER KEYS: " (keys @tracker)))
+      (.setPort connector 8888)
+      (.setHost connector  (.. java.net.InetAddress getLocalHost getHostName))
+      (.addConnector server connector)
+      (.setHandler server handlers)
       ;; setup proxy servlet
       (let [context (ServletContextHandler.
                      handlers "/" ServletContextHandler/SESSIONS)
             proxyServlet (ServletHolder.
-                          (make-proxy (:client @(:instances @tracker))
+                          (make-proxy (:traces-ref @tracker)
+                                      (:client @(:instances @tracker))
                                       connections-root-node
                                       (partial mapper-fn tracker)))
             proxy (ConnectHandler.)]
-        (. context addServlet proxyServlet "/*")
-        (. handlers addHandler proxy)
-        (. server start)))))
+        (.addServlet context proxyServlet "/*")
+        (.addHandler handlers proxy)
+        (.start server)))))
 
 (defn main2
   [keepers env app region]
