@@ -117,11 +117,11 @@
       )
     (let [my-region (:my-region @tracker-ref)
           routes-multi (:routes-multi @tracker-ref)
-          service (.getHeader request "service-name")
-	  client-id (.getHeader request "client-id")
+          service (.getHeader request "x-service-name")
+	  client-id (.getHeader request "x-client-id")
 	  client-verified (verify-client (:client-regs-ref @tracker-ref) client-id service)
-	  major (.getIntHeader request "service-version-major")
-	  minor (.getIntHeader request "service-version-minor")]
+	  major (.getIntHeader request "x-service-version-major")
+	  minor (.getIntHeader request "x-service-version-minor")]
       (log/spy :debug (str "CLIENT ID: " client-id))
       (log/spy :debug (str "CLIENT VERIFIED: " client-verified))
       (log/spy :debug (str "SERVICE NAME: " service))
