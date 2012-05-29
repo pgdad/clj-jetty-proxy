@@ -2,7 +2,8 @@
   (:require [zookeeper :as zk]
             [clojure.reflect] [clojure.zip :as z]
             [clojure.tools.logging :as log]
-            [clj-zoo-service-tracker.core :as tr])
+            [clj-zoo-service-tracker.core :as tr]
+            [clj-jetty-proxy.mapper :as mpr])
   (:import (org.eclipse.jetty.servlets ProxyServlet ProxyServlet$Transparent)
 	   (org.eclipse.jetty.servlet ServletContextHandler ServletHolder)
            (org.eclipse.jetty.http HttpURI)
@@ -100,41 +101,6 @@
         (service-f req res)
         (proxy-super service req res)))))
 
-(defn- verify-client
-  [client-regs-ref client-id service]
-  (dosync
-   (let [registrations (ensure client-regs-ref)
-         servs-for-client (registrations client-id)]
-     (log/spy :debug (str "CLIENT REGISTRATIONS: " registrations))
-     (and servs-for-client (contains? servs-for-client service)))))
-
-(defn- mapper-fn
-  "returns a string to proxy to, available parameters are obtained from the incoming request"
-  [tracker-ref request uri]
-  (do
-    (let [
-          ]
-      )
-    (let [my-region (:my-region @tracker-ref)
-          routes-multi (:routes-multi @tracker-ref)
-          service (.getHeader request "x-service-name")
-	  client-id (.getHeader request "x-client-id")
-	  client-verified (verify-client (:client-regs-ref @tracker-ref) client-id service)
-	  major (.getIntHeader request "x-service-version-major")
-	  minor (.getIntHeader request "x-service-version-minor")]
-      (log/spy :debug (str "CLIENT ID: " client-id))
-      (log/spy :debug (str "CLIENT VERIFIED: " client-verified))
-      (log/spy :debug (str "SERVICE NAME: " service))
-      (log/spy :debug (str "SERVICE MAJOR: " major))
-      (log/spy :debug (str "SERVICE MINOR: " minor))
-      (log/spy :debug (str "URI: " uri))
-      (if-not (and service client-verified)
-        ;; nil here means the 'service-name' is not in request
-        ;; or client is not allowed to access service
-        nil
-        ;; check to see if version is asked for
-        (tr/lookup-service tracker-ref service major minor uri client-id)))))
-
 (defn -main
   [keepers region]
   (let [server (Server.)
@@ -154,7 +120,7 @@
                           (make-proxy (:traces-ref @tracker)
                                       (:client @(:instances @tracker))
                                       connections-root-node
-                                      (partial mapper-fn tracker)))
+                                      (partial mpr/req->url tracker)))
             proxy (ConnectHandler.)]
         (.addServlet context proxyServlet "/*")
         (.addHandler handlers proxy)
