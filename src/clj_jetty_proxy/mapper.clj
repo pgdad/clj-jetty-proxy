@@ -1,4 +1,5 @@
 (ns clj-jetty-proxy.mapper
+  (:import (javax.servlet.http HttpServletRequest))
   (:require [clj-zoo-service-tracker.core :as tr]
             [clojure.tools.logging :as log])
    (:gen-class))
@@ -16,7 +17,7 @@
 
 (defn- headers->routing-info
   "extract routing related info from headers into a map that may be empty"
-  [request]
+  [^HttpServletRequest request]
   (let [headers '("x-service-name" "x-client-id")
         int-headers `("x-service-version-major" "x-service-version-minor") ]
     (merge (reduce #(let [r (.getHeader request %2)]

@@ -10,7 +10,8 @@
 	   (org.eclipse.jetty.server Server)
 	   (org.eclipse.jetty.server.handler HandlerCollection ConnectHandler)
 	   (org.eclipse.jetty.server.nio SelectChannelConnector)
-           (org.eclipse.jetty.client HttpClient))
+           (org.eclipse.jetty.client HttpClient HttpExchange)
+           (javax.servlet.http HttpServletRequest HttpServletResponse))
   (:use [clj-jetty-proxy.proxylistener])
   (:gen-class))
 
@@ -25,11 +26,11 @@
 (def healthcheck-on (ref true))
 
 (defn- trace?
-  [traces exchange]
+  [traces ^HttpExchange exchange]
   (traces (.toString (.getAddress exchange))))
 
 (defn- add-connection
-  [traces connection exchange root-node]
+  [traces connection ^HttpExchange exchange root-node]
   (send-off current-connections inc)
   (if (trace? traces exchange)
     (let [node (str root-node "/" (.getAddress exchange) "/-instance")
@@ -48,7 +49,7 @@
      (alter connections dissoc exchange))))
 
 (defn- set-listener
-  [traces connection exchange]
+  [traces connection ^HttpExchange exchange]
   (let [old-listener (.getEventListener exchange)]
     (.setEventListener exchange
                        (listener connection
@@ -58,19 +59,19 @@
                                                      connection exchange)))))
 
 (defn- healthcheck
-  [req res]
+  [req ^HttpServletResponse res]
   (if @healthcheck-on
     (.setStatus res 200)
     (.setStatus res 404))
   )
 
 (defn- set-healthcheck
-  [on req res]
+  [on req ^HttpServletResponse res]
   (.setStatus res 200)
   (dosync (alter healthcheck-on (fn [ & args] on))))
 
 (defn- status
-  [req res]
+  [req ^HttpServletResponse res]
   (let [wtr (.getWriter res)]
     (.print wtr (str "PEAK=" @peak-connections "\n"))
     (.print wtr (str "CURRENT=" @current-connections "\n"))
@@ -85,7 +86,7 @@
 
 (defn make-proxy
   "creates ProxyServlet that customizes exchange, and configures url"
-  [traces-ref connection connections-root-node url-mapper]
+  ^ProxyServlet [traces-ref connection connections-root-node url-mapper]
   (proxy [org.eclipse.jetty.servlets.ProxyServlet] []
     (customizeExchange [exchange request]
       (let [traces @traces-ref]
@@ -94,10 +95,10 @@
     (proxyHttpURI [request uri]
       (let [url (url-mapper request uri)]
         (if url
-          (HttpURI. url)
+          (HttpURI. ^String url)
           nil)))
     (service [req res]
-      (if-let [service-f (internal-requests (.getRequestURI req))]
+      (if-let [service-f (internal-requests (.getRequestURI ^HttpServletRequest req))]
         (service-f req res)
         (proxy-super service req res)))))
 

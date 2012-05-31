@@ -1,10 +1,10 @@
 (ns clj-jetty-proxy.proxylistener
   (:require [zookeeper :as zk])
-  (:import (org.eclipse.jetty.client.HttpEventListener))
+  (:import (org.eclipse.jetty.client HttpEventListener))
   (:gen-class))
 
 (defn listener
-  [connection old-listener done-f remove-f]
+  [connection ^HttpEventListener old-listener done-f remove-f]
 
   (proxy [org.eclipse.jetty.client.HttpEventListener] []
     (onRequestCommitted []
