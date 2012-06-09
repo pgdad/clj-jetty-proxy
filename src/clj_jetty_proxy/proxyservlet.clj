@@ -3,7 +3,8 @@
             [clojure.reflect] [clojure.zip :as z]
             [clojure.tools.logging :as log]
             [clj-zoo-service-tracker.core :as tr]
-            [clj-jetty-proxy.mapper :as mpr])
+            [clj-jetty-proxy.mapper :as mpr]
+            [clj-jetty-proxy.stats :as stats])
   (:import (org.eclipse.jetty.servlets ProxyServlet ProxyServlet$Transparent)
 	   (org.eclipse.jetty.servlet ServletContextHandler ServletHolder)
            (org.eclipse.jetty.http HttpURI)
@@ -17,46 +18,70 @@
 
 (def connections (ref {}))
 
-(def current-connections (agent 0))
-
-(def peak-connections (agent 0))
-
-(add-watch current-connections :peak #(send-off peak-connections max %4))
-
 (def healthcheck-on (ref true))
 
 (defn- trace?
   [traces ^HttpExchange exchange]
   (traces (.toString (.getAddress exchange))))
 
-(defn- add-connection
-  [traces connection ^HttpExchange exchange root-node]
-  (send-off current-connections inc)
-  (if (trace? traces exchange)
-    (let [node (str root-node "/" (.getAddress exchange) "/-instance")
-        node-reply (zk/create-all connection node :sequential? true :async? true)]
-      (dosync
-       (alter connections assoc exchange node-reply)))))
+;; maps exchange -> service def
+(def exchange-map (ref {}))
 
-(defn- remove-connection
-  [trace-it connection exchange]
-  (send-off current-connections dec)
-  (if trace-it
+;; maps request -> service def
+(def request-to-service-map (ref {}))
+
+(defn- request-to-service-adder
+  [request service]
+  (dosync
+   (alter request-to-service-map assoc-in [request] service)))
+
+(defn- request-to-service-rm
+  [request]
+  (dosync
+   (alter request-to-service-map dissoc request)))
+
+(defn- request-to-service-val
+  [request]
+  (@request-to-service-map request))
+
+(defn- request-to-service-remover
+  [request]
+  (let [v (request-to-service-val request)]
+    (if v (request-to-service-rm request))
+    v))
+
+;; add service def to exhange -> service def map
+;; first obtain it from the request -> map
+(defn- exchange-map-adder
+  [exchange request]
+  (let [service (request-to-service-remover request)]
     (dosync
-     (let [node-create-respond-ref (connections exchange)
-           node (:name @node-create-respond-ref)]
-       (zk/delete connection node :async? true))
-     (alter connections dissoc exchange))))
+     (alter exchange-map assoc-in [exchange] service))))
+
+(defn- exchange-map-rm
+  [exchange]
+  (dosync
+   (alter exchange-map dissoc exchange)))
+
+(defn- exchange-map-val
+  [exchange]
+  (@exchange-map exchange))
+
+(defn- exchange-map-remover
+  [exchange]
+  (let [v (exchange-map-val exchange)]
+    (if v (exchange-map-rm exchange))
+    v))
 
 (defn- set-listener
-  [traces connection ^HttpExchange exchange]
+  [^HttpExchange exchange request]
+  (exchange-map-adder exchange request)
   (let [old-listener (.getEventListener exchange)]
     (.setEventListener exchange
-                       (listener connection
-                                 old-listener
-                                 #(.isDone exchange)
-                                 #(remove-connection (trace? traces exchange)
-                                                     connection exchange)))))
+                       (listener old-listener
+                                 exchange
+                                 exchange-map-remover
+                                 #(.isDone exchange)))))
 
 (defn- healthcheck
   [req ^HttpServletResponse res]
@@ -73,8 +98,6 @@
 (defn- status
   [req ^HttpServletResponse res]
   (let [wtr (.getWriter res)]
-    (.print wtr (str "PEAK=" @peak-connections "\n"))
-    (.print wtr (str "CURRENT=" @current-connections "\n"))
     (.print wtr (str "HEALTHCHECK=" @healthcheck-on "\n"))
     (.flush wtr))
   (.setStatus res 200))
@@ -86,14 +109,13 @@
 
 (defn make-proxy
   "creates ProxyServlet that customizes exchange, and configures url"
-  ^ProxyServlet [traces-ref connection connections-root-node url-mapper]
+  ^ProxyServlet [url-mapper]
+
   (proxy [org.eclipse.jetty.servlets.ProxyServlet] []
     (customizeExchange [exchange request]
-      (let [traces @traces-ref]
-        (add-connection traces connection exchange connections-root-node)
-        (set-listener traces connection exchange)))
+      (set-listener exchange request))
     (proxyHttpURI [request uri]
-      (let [url (url-mapper request uri)]
+      (let [url (url-mapper request-to-service-adder request uri)]
         (if url
           (HttpURI. ^String url)
           nil)))
@@ -107,27 +129,20 @@
   (let [server (Server.)
         connector (SelectChannelConnector.)
         handlers (HandlerCollection.)
-        connections-root-node "/connections"
         ]
+    (stats/setup)
     (let [tracker (tr/initialize keepers region)]
       (.setPort connector 8888)
-      (.setHost connector  (.. java.net.InetAddress getLocalHost getHostName))
+      #_(.setHost connector  (.. java.net.InetAddress getLocalHost getHostName))
       (.addConnector server connector)
       (.setHandler server handlers)
       ;; setup proxy servlet
       (let [context (ServletContextHandler.
                      handlers "/" ServletContextHandler/SESSIONS)
             proxyServlet (ServletHolder.
-                          (make-proxy (:traces-ref @tracker)
-                                      (:client @(:instances @tracker))
-                                      connections-root-node
-                                      (partial mpr/req->url tracker)))
+                          (make-proxy
+                           (partial mpr/req->url tracker)))
             proxy (ConnectHandler.)]
         (.addServlet context proxyServlet "/*")
         (.addHandler handlers proxy)
         (.start server)))))
-
-(defn main2
-  [keepers region]
-  (let [tracker (tr/initialize keepers region)]
-    tracker))

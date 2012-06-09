@@ -61,7 +61,7 @@
 
 (defn req->url
   "use url path parts to determine request routing"  
-  [tracker-ref request uri]
+  [tracker-ref adder request uri]
   (do
     (let [extracted-rt-info (extract-rt-info request uri)
           my-region (:my-region @tracker-ref)
@@ -83,7 +83,11 @@
         ;; or client is not allowed to access service
         nil
         ;; check to see if version is asked for
-        (tr/lookup-service tracker-ref service major minor url client-id)))))
+        (if-let [lu (tr/lookup-service tracker-ref service major minor url client-id)]
+          (do
+            (adder request {:service service :major major
+                            :minor minor :start (System/currentTimeMillis)})
+            lu))))))
 
 
 
