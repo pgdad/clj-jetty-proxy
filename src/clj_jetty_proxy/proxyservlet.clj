@@ -22,7 +22,7 @@
 
 (defn- trace?
   [traces ^HttpExchange exchange]
-  (traces (.toString (.getAddress exchange))))
+  (traces (str (.getAddress exchange))))
 
 ;; maps exchange -> service def
 (def exchange-map (ref {}))
@@ -116,9 +116,7 @@
       (set-listener exchange request))
     (proxyHttpURI [request uri]
       (let [url (url-mapper request-to-service-adder request uri)]
-        (if url
-          (HttpURI. ^String url)
-          nil)))
+        (when url (HttpURI. ^String url))))
     (service [req res]
       (if-let [service-f (internal-requests (.getRequestURI ^HttpServletRequest req))]
         (service-f req res)

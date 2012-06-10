@@ -28,11 +28,10 @@
       (.onRequestCommitted old-listener))
     (onRequestComplete []
       (.onRequestComplete old-listener)
-      (if (done-f)
-        (do
-          (try
-            (do-stats remover exchange false)
-            (catch Exception ex (println (str "DONE EX:" ex)))))
+      (when (done-f)
+        (try
+          (do-stats remover exchange false)
+          (catch Exception ex (println (str "DONE EX:" ex))))
         ))
     (onResponseStatus [version status reason]
       (.onResponseStatus old-listener version status reason))
@@ -44,11 +43,10 @@
       (.onResponseContent old-listener content))
     (onResponseComplete []
       (.onResponseComplete old-listener)
-      (if (done-f)
-        (do
-          (try
-            (do-stats remover exchange false)
-            (catch Exception ex (println (str "DONE EX:" ex)))))
+      (when (done-f)
+        (try
+          (do-stats remover exchange false)
+          (catch Exception ex (println (str "DONE EX:" ex))))
         ))
     (onConnectionFailed [ex]
       (do-stats remover exchange true)

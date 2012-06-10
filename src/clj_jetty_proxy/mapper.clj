@@ -24,8 +24,8 @@
                       (if r (assoc %1 %2 r)
                           %1)) {} headers)
            (reduce #(let [r (.getIntHeader request %2)]
-                      (if (not (= -1 r)) (assoc %1 %2 r)
-                          %1)) {} int-headers)
+                      (if-not (= -1 r) (assoc %1 %2 r)
+                              %1)) {} int-headers)
            ) 
     )
   )
@@ -55,39 +55,37 @@
   (let [hdr-rt-info (headers->routing-info request)]
     (if (sufficient-rt-info? hdr-rt-info)
       (assoc hdr-rt-info :url uri)
-      (if-let [rt-info (merge (url->routing-info uri) hdr-rt-info)]
-        rt-info
-        nil))))
+      (when-let [rt-info (merge (url->routing-info uri) hdr-rt-info)]
+        rt-info))))
 
 (defn req->url
   "use url path parts to determine request routing"  
   [tracker-ref adder request uri]
-  (do
-    (let [extracted-rt-info (extract-rt-info request uri)
-          my-region (:my-region @tracker-ref)
-          routes-multi (:routes-multi @tracker-ref)
-          service (extracted-rt-info "x-service-name")
-	  client-id (extracted-rt-info "x-client-id")
-	  client-verified (verify-client (:client-regs-ref @tracker-ref) client-id service)
-	  major (extracted-rt-info "x-service-version-major")
-	  minor (extracted-rt-info "x-service-version-minor" 0)
-          url (extracted-rt-info :url uri)]
-      (log/spy :debug (str "CLIENT ID: " client-id))
-      (log/spy :debug (str "CLIENT VERIFIED: " client-verified))
-      (log/spy :debug (str "SERVICE NAME: " service))
-      (log/spy :debug (str "SERVICE MAJOR: " major))
-      (log/spy :debug (str "SERVICE MINOR: " minor))
-      (log/spy :debug (str "URI: " url))
-      (if-not (and service client-verified)
-        ;; nil here means the 'service-name' is not in request
-        ;; or client is not allowed to access service
-        nil
-        ;; check to see if version is asked for
-        (if-let [lu (tr/lookup-service tracker-ref service major minor url client-id)]
-          (do
-            (adder request {:service service :major major
-                            :minor minor :start (System/currentTimeMillis)})
-            lu))))))
+  (let [extracted-rt-info (extract-rt-info request uri)
+        my-region (:my-region @tracker-ref)
+        routes-multi (:routes-multi @tracker-ref)
+        service (extracted-rt-info "x-service-name")
+        client-id (extracted-rt-info "x-client-id")
+        client-verified (verify-client (:client-regs-ref @tracker-ref) client-id service)
+        major (extracted-rt-info "x-service-version-major")
+        minor (extracted-rt-info "x-service-version-minor" 0)
+        url (extracted-rt-info :url uri)]
+    (log/spy :debug (str "CLIENT ID: " client-id))
+    (log/spy :debug (str "CLIENT VERIFIED: " client-verified))
+    (log/spy :debug (str "SERVICE NAME: " service))
+    (log/spy :debug (str "SERVICE MAJOR: " major))
+    (log/spy :debug (str "SERVICE MINOR: " minor))
+    (log/spy :debug (str "URI: " url))
+    (if-not (and service client-verified)
+      ;; nil here means the 'service-name' is not in request
+      ;; or client is not allowed to access service
+      nil
+      ;; check to see if version is asked for
+      (if-let [lu (tr/lookup-service tracker-ref service major minor url client-id)]
+        (do
+          (adder request {:service service :major major
+                          :minor minor :start (System/currentTimeMillis)})
+          lu)))))
 
 
 

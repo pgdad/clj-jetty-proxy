@@ -14,4 +14,5 @@
   :aot :all
   :warn-on-reflection true
   :jar-exclusions [#"project.clj"]
-  :omit-source true)
+  :omit-source true
+  :plugins [[jonase/kibit "0.0.4"]])
