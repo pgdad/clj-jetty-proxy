@@ -58,10 +58,40 @@
       (when-let [rt-info (merge (url->routing-info uri) hdr-rt-info)]
         rt-info))))
 
+(defmacro srv-info-in-headers?
+  [rt-info]
+  `(let [m# ~rt-info]
+     (and
+      ;; no service related headers
+      (contains? m# "x-service-name")
+      (contains? m# "x-service-version-major"))))
+
+(defmacro client-id?
+  [rt-info]
+  `(contains? ~rt-info "x-client-id"))
+
+(defmacro add-default-srv-hdrs
+  [rt-info]
+  `(assoc ~rt-info
+     "x-service-name" "_default"
+     "x-service-version-major" 1))
+
+(defmacro add-default-client-id
+  [rt-info]
+  `(assoc ~rt-info "x-client-id" "_default"))
+
+(defn- add-defaults-if-needed
+  [rt-info]
+  (let [rt-i (if-not (srv-info-in-headers? rt-info) (add-default-srv-hdrs rt-info) rt-info)]
+    (if-not (client-id? rt-i)
+      (add-default-client-id rt-i)
+      rt-i)))
+
 (defn req->url
   "use url path parts to determine request routing"  
   [tracker-ref adder request uri]
-  (let [extracted-rt-info (extract-rt-info request uri)
+  (let [e-rt-info (extract-rt-info request uri)
+        extracted-rt-info (add-defaults-if-needed e-rt-info)
         my-region (:my-region @tracker-ref)
         routes-multi (:routes-multi @tracker-ref)
         service (extracted-rt-info "x-service-name")
