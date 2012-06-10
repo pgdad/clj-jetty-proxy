@@ -12,7 +12,8 @@
 	   (org.eclipse.jetty.server.handler HandlerCollection ConnectHandler)
 	   (org.eclipse.jetty.server.nio SelectChannelConnector)
            (org.eclipse.jetty.client HttpClient HttpExchange)
-           (javax.servlet.http HttpServletRequest HttpServletResponse))
+           (javax.servlet.http HttpServletRequest HttpServletResponse)
+           (java.lang.management ManagementFactory))
   (:use [clj-jetty-proxy.proxylistener])
   (:gen-class))
 
@@ -102,10 +103,35 @@
     (.flush wtr))
   (.setStatus res 200))
 
-(def internal-requests {"/_healthcheck" healthcheck
+(defn- metrics
+  [req ^HttpServletResponse res]
+  (let [wtr (.getWriter res)
+        runtime (ManagementFactory/getRuntimeMXBean)
+        uptime (.getUptime runtime)
+	threads (ManagementFactory/getThreadMXBean)
+	threadCount (.getThreadCount threads)
+	startedThreadsCount (.getTotalStartedThreadCount threads)
+	daemonCount (.getDaemonThreadCount threads)
+	peakCount (.getPeakThreadCount threads)
+	threadIds (.getAllThreadIds threads)
+        totalCpuTime (reduce #(+ %1 (.getThreadCpuTime threads %2)) threadIds)
+        totalUserTime (reduce #(+ %1 (.getThreadUserTime threads %2)) threadIds)
+	]
+    (.println wtr (str "THREAD-COUNT=" threadCount))
+    (.println wtr (str "STARTED-THREAD-COUNT=" startedThreadsCount))
+    (.println wtr (str "DAEMON-COUNT=" daemonCount))
+    (.println wtr (str "PEAK-COUNT=" peakCount))
+    (.println wtr (str "THREADIDS=" threadIds))
+    (.println wtr (str "UPTIME=" uptime))
+    (.println wtr (str "TOTAL-CPU-TIME=" totalCpuTime))
+    (.println wtr (str "TOTAL-USER-TIME=" totalUserTime))
+    ))
+
+  (def internal-requests {"/_healthcheck" healthcheck
                         "/_healthcheckOff" (partial set-healthcheck false)
                         "/_healthcheckOn" (partial set-healthcheck true)
-                        "/_status" status})
+                        "/_status" status
+                        "/_metrics" metrics})
 
 (defn make-proxy
   "creates ProxyServlet that customizes exchange, and configures url"
