@@ -4,16 +4,19 @@
             [clojure.tools.logging :as log]
             [clj-zoo-service-tracker.core :as tr]
             [clj-jetty-proxy.mapper :as mpr]
+            [clj-jetty-proxy.ServletFilter :as fltr]
             [clj-jetty-proxy.stats :as stats])
   (:import (org.eclipse.jetty.servlets ProxyServlet ProxyServlet$Transparent)
-	   (org.eclipse.jetty.servlet ServletContextHandler ServletHolder)
+	   (org.eclipse.jetty.servlet FilterMapping ServletContextHandler ServletHolder)
            (org.eclipse.jetty.http HttpURI)
 	   (org.eclipse.jetty.server Server)
 	   (org.eclipse.jetty.server.handler HandlerCollection ConnectHandler)
 	   (org.eclipse.jetty.server.nio SelectChannelConnector)
            (org.eclipse.jetty.client HttpClient HttpExchange)
            (javax.servlet.http HttpServletRequest HttpServletResponse)
-           (java.lang.management ManagementFactory))
+           (javax.servlet DispatcherType)
+           (java.lang.management ManagementFactory)
+           (java.util EnumSet))
   (:use [clj-jetty-proxy.proxylistener])
   (:gen-class))
 
@@ -133,7 +136,7 @@
                         "/_status" status
                         "/_metrics" metrics})
 
-(defn make-proxy
+(defn- make-proxy
   "creates ProxyServlet that customizes exchange, and configures url"
   ^ProxyServlet [url-mapper]
 
@@ -147,6 +150,11 @@
       (if-let [service-f (internal-requests (.getRequestURI ^HttpServletRequest req))]
         (service-f req res)
         (proxy-super service req res)))))
+
+(defn- make-filter
+  "creates a servlet filter that looks for service name and version in content"
+  []
+  (fltr/make-filter))
 
 (defn -main
   [keepers region]
@@ -167,6 +175,8 @@
                           (make-proxy
                            (partial mpr/req->url tracker)))
             proxy (ConnectHandler.)]
+        (Thread/sleep 5000)
+        (.addFilter context (make-filter) "/*" (EnumSet/of javax.servlet.DispatcherType/REQUEST))
         (.addServlet context proxyServlet "/*")
         (.addHandler handlers proxy)
         (.start server)))))

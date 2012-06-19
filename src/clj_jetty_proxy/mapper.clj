@@ -90,6 +90,13 @@
 (defn req->url
   "use url path parts to determine request routing"  
   [tracker-ref adder request uri]
+  (println (str "REG: " (.getLocalName request)))
+  (println (str "REG RPort: " (.getRemotePort request))) 
+  (println (str "REG CType: " (.getContentType request)))
+  (println (str "REG CLen: " (.getContentLength request))) 
+  (println (str "REG CRead: " (.getContentRead request)))
+  (println (str "REG IStream: " (.getInputStream request)))
+  (println (str "REG Conn: " (.getConnection request)))
   (let [e-rt-info (extract-rt-info request uri)
         extracted-rt-info (add-defaults-if-needed e-rt-info)
         my-region (:my-region @tracker-ref)
