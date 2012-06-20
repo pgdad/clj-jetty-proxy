@@ -175,8 +175,6 @@
                           (make-proxy
                            (partial mpr/req->url tracker)))
             proxy (ConnectHandler.)]
-        (Thread/sleep 5000)
-        (.addFilter context (make-filter) "/*" (EnumSet/of javax.servlet.DispatcherType/REQUEST))
         (.addServlet context proxyServlet "/*")
         (.addHandler handlers proxy)
         (.start server)))))

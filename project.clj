@@ -7,6 +7,7 @@
    [clj-zoo-service-tracker "1.0.8"]
    [log4j/log4j "1.2.16"]
    [org.clojure/tools.logging "0.2.3"]
+   [org.clojure/data.xml "0.0.4"]
    [clj-statsd "0.3.3"]]
   :repl-init clj-jetty-proxy.proxyservlet
   :main clj-jetty-proxy.proxyservlet
