@@ -152,14 +152,14 @@
         (proxy-super service (clj_jetty_proxy.HSRequestWrapper. req) res)))))
 
 (defn main-with-body-examiner
-  [body-ex-fun keepers region]
+  [body-ex-fun keepers region port]
   (let [server (Server.)
         connector (SelectChannelConnector.)
         handlers (HandlerCollection.)
         ]
     (stats/setup)
     (let [tracker (tr/initialize keepers region)]
-      (.setPort connector 8888)
+      (.setPort connector (read-string port))
       #_(.setHost connector  (.. java.net.InetAddress getLocalHost getHostName))
       (.addConnector server connector)
       (.setHandler server handlers)
@@ -175,5 +175,5 @@
         (.start server)))))
 
 (defn -main
-  [keepers region]
-  (main-with-body-examiner nil keepers region))
+  [keepers region port]
+  (main-with-body-examiner nil keepers region port))
