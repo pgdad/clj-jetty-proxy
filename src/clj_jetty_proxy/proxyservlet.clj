@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [clj-zoo-service-tracker.core :as tr]
             [clj-jetty-proxy.mapper :as mpr]
-            [clj-jetty-proxy.ServletFilter :as fltr]
+            [clj-jetty-proxy.HSRequestWrapper :as rwrapper]
             [clj-jetty-proxy.stats :as stats])
   (:import (org.eclipse.jetty.servlets ProxyServlet ProxyServlet$Transparent)
 	   (org.eclipse.jetty.servlet FilterMapping ServletContextHandler ServletHolder)
@@ -149,15 +149,10 @@
     (service [req res]
       (if-let [service-f (internal-requests (.getRequestURI ^HttpServletRequest req))]
         (service-f req res)
-        (proxy-super service req res)))))
+        (proxy-super service (clj_jetty_proxy.HSRequestWrapper. req) res)))))
 
-(defn- make-filter
-  "creates a servlet filter that looks for service name and version in content"
-  []
-  (fltr/make-filter))
-
-(defn -main
-  [keepers region]
+(defn main-with-body-examiner
+  [body-ex-fun keepers region]
   (let [server (Server.)
         connector (SelectChannelConnector.)
         handlers (HandlerCollection.)
@@ -173,8 +168,12 @@
                      handlers "/" ServletContextHandler/SESSIONS)
             proxyServlet (ServletHolder.
                           (make-proxy
-                           (partial mpr/req->url tracker)))
+                           (partial mpr/req->url body-ex-fun tracker)))
             proxy (ConnectHandler.)]
         (.addServlet context proxyServlet "/*")
         (.addHandler handlers proxy)
         (.start server)))))
+
+(defn -main
+  [keepers region]
+  (main-with-body-examiner nil keepers region))

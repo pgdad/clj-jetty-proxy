@@ -1,7 +1,8 @@
 (ns clj-jetty-proxy.mapper
   (:import (javax.servlet.http HttpServletRequest))
   (:require [clj-zoo-service-tracker.core :as tr]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [clojure.data.xml :as dxml])
    (:gen-class))
 
 (def ^:const url-serv-pattern
@@ -51,12 +52,16 @@
        (contains? rt-info "x-service-version-major")))
 
 (defn- extract-rt-info
-  [request uri]
+  [body-ex-fun request uri]
   (let [hdr-rt-info (headers->routing-info request)]
     (if (sufficient-rt-info? hdr-rt-info)
       (assoc hdr-rt-info :url uri)
-      (when-let [rt-info (merge (url->routing-info uri) hdr-rt-info)]
-        rt-info))))
+      (when-let [url-hdr-rt-info (merge (url->routing-info uri) hdr-rt-info)]
+        (if (sufficient-rt-info? url-hdr-rt-info)
+          url-hdr-rt-info
+          (if body-ex-fun
+            (merge (body-ex-fun request) url-hdr-rt-info)
+            url-hdr-rt-info))))))
 
 (defmacro srv-info-in-headers?
   [rt-info]
@@ -82,22 +87,19 @@
 
 (defn- add-defaults-if-needed
   [rt-info]
+  (log/spy :debug (str "Adding defaults to:" rt-info
+                       " IF: " (srv-info-in-headers? rt-info)))
   (let [rt-i (if-not (srv-info-in-headers? rt-info) (add-default-srv-hdrs rt-info) rt-info)]
+    (log/spy :debug (str "DO I HAVE CLIENT ID in add defs: " (client-id? rt-i)))
     (if-not (client-id? rt-i)
       (add-default-client-id rt-i)
       rt-i)))
 
 (defn req->url
   "use url path parts to determine request routing"  
-  [tracker-ref adder request uri]
-  (println (str "REG: " (.getLocalName request)))
-  (println (str "REG RPort: " (.getRemotePort request))) 
-  (println (str "REG CType: " (.getContentType request)))
-  (println (str "REG CLen: " (.getContentLength request))) 
-  (println (str "REG CRead: " (.getContentRead request)))
-  (println (str "REG IStream: " (.getInputStream request)))
-  (println (str "REG Conn: " (.getConnection request)))
-  (let [e-rt-info (extract-rt-info request uri)
+  [body-ex-fun tracker-ref adder request uri]
+  (let [e-rt-info (extract-rt-info body-ex-fun request uri)
+        _ (log/spy :debug (str "INFO BEFORE ADD DEFAULTS: " e-rt-info))
         extracted-rt-info (add-defaults-if-needed e-rt-info)
         my-region (:my-region @tracker-ref)
         routes-multi (:routes-multi @tracker-ref)

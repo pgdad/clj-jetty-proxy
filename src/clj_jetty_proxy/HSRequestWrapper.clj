@@ -17,7 +17,15 @@
 (defn -post-init
   [this request]
   (let [s (.state this)]
-    (if-let [instream (.getInputStream request)]
+    (dosync
+     (alter s assoc-in [:request] request))
+    ))
+
+(defn- slurp-input
+  "copy real input stream contents into a string, store it in session"
+  [this request]
+  (let [s (.state this)]
+    (if-let [instream (.getInputStream (:request @s))]
       (dosync
        (alter s assoc-in [:content] (slurp instream)))
       (dosync
@@ -25,9 +33,18 @@
 
 (defn -getInputStream
   [this]
-  (let [barray-input-stream (java.io.ByteArrayInputStream.
-                             (.getBytes (:content @(.state this))))]
-    (proxy [javax.servlet.ServletInputStream] []
-      (read
-        ([] (.read barray-input-stream))
-        ([a b c] (.read barray-input-stream a b c))))))
+  (let [s (.state this)
+        request (:request @s)]
+    ;; if POST request save input content, so that it can be forwarded later
+    (if (= "POST" (.getMethod request))
+      (do
+        (if-not (:content @s)
+          (slurp-input this request))
+        (let [barray-input-stream (java.io.ByteArrayInputStream.
+                                   (.getBytes (:content @s)))]
+          (proxy [javax.servlet.ServletInputStream] []
+            (read
+              ([] (.read barray-input-stream))
+              ([a b c] (.read barray-input-stream a b c))))))
+      (.getInputStream (:request @s))))
+)
