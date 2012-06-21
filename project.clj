@@ -1,4 +1,4 @@
-(defproject clj-jetty-proxy "1.0.10"
+(defproject clj-jetty-proxy "1.0.11"
   :description "FIXME: write description"
   :dependencies
   [[org.clojure/clojure "1.3.0"]

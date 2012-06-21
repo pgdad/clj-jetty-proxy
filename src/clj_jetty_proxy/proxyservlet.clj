@@ -9,9 +9,11 @@
   (:import (org.eclipse.jetty.servlets ProxyServlet ProxyServlet$Transparent)
 	   (org.eclipse.jetty.servlet FilterMapping ServletContextHandler ServletHolder)
            (org.eclipse.jetty.http HttpURI)
+           (org.eclipse.jetty.util.ssl SslContextFactory)
 	   (org.eclipse.jetty.server Server)
 	   (org.eclipse.jetty.server.handler HandlerCollection ConnectHandler)
 	   (org.eclipse.jetty.server.nio SelectChannelConnector)
+	   (org.eclipse.jetty.server.ssl SslSelectChannelConnector)
            (org.eclipse.jetty.client HttpClient HttpExchange)
            (javax.servlet.http HttpServletRequest HttpServletResponse)
            (javax.servlet DispatcherType)
@@ -151,10 +153,19 @@
         (service-f req res)
         (proxy-super service (clj_jetty_proxy.HSRequestWrapper. req) res)))))
 
+(defn- make-connector
+  [keystore keystore-passwd]
+  (if keystore
+    (let [fact (SslContextFactory. keystore)
+          _ (.setKeyStorePassword fact keystore-passwd)]
+      (SslSelectChannelConnector. fact))
+      (SelectChannelConnector.)))
+
 (defn main-with-body-examiner
-  [body-ex-fun keepers region port]
+  [body-ex-fun keepers region port
+   & {:keys [ks kspasswd] :or {ks nil kspasswd nil}}]
   (let [server (Server.)
-        connector (SelectChannelConnector.)
+        connector (make-connector ks kspasswd)
         handlers (HandlerCollection.)
         ]
     (stats/setup)
