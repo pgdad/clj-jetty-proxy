@@ -8,13 +8,15 @@
 (def ^:const url-serv-pattern
   (re-pattern "/([^/]*)/v([0-9]*)(\056([0-9]*))(/.*)?"))
 
+(defn- construct-client-registrations-path
+  [service client-id]
+  (str "/clientregistrations/" service "/" client-id))
+
+(def client-registrations-path (memoize construct-client-registrations-path) )
+
 (defn- verify-client
-  [client-regs-ref client-id service]
-  (dosync
-   (let [registrations (ensure client-regs-ref)
-         servs-for-client (registrations client-id)]
-     (log/spy :debug (str "CLIENT REGISTRATIONS: " registrations))
-     (and servs-for-client (contains? servs-for-client service)))))
+  [registrations service client-id]
+  (contains? registrations (client-registrations-path service client-id)))
 
 (defn- headers->routing-info
   "extract routing related info from headers into a map that may be empty"
@@ -105,7 +107,14 @@
         routes-multi (:routes-multi @tracker-ref)
         service (extracted-rt-info "x-service-name")
         client-id (extracted-rt-info "x-client-id")
-        client-verified (verify-client (:client-regs-ref @tracker-ref) client-id service)
+        client-regs-ref (:client-regs-ref @tracker-ref)
+        _ (println (str "CLIENT REGS REF: " client-regs-ref))
+        client-regs-curator-ref (:client-regs-curator-ref @tracker-ref)
+        _ (println (str "CLIENT REGS CURATOR REF: " @client-regs-curator-ref))
+        _ (println (str "CLIENT REG CACHE: " @(:client-reg-cache @tracker-ref)))
+        client-verified (verify-client @(:client-reg-cache @tracker-ref)
+                                       service client-id)
+        _ (println (str "VERIFYED CLIENT 0: " client-verified-0))
         major (extracted-rt-info "x-service-version-major")
         minor (extracted-rt-info "x-service-version-minor" 0)
         url (extracted-rt-info :url uri)]
